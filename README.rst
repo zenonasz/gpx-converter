@@ -1,3 +1,71 @@
+WunderLINQ integration and custom extensions
+===========================================
+
+This fork of ``gpx_converter`` adds first-class support for WunderLINQ TripLog CSV files and arbitrary GPX extension namespaces.
+
+1. **Convert WunderLINQ CSV to GPX**
+
+   The script ``run/wlinq_csv_to_gpx.py`` reads the WunderLINQ CSV format, validates required columns, and writes a GPX file with custom extension tags prefixed by the ``wlinq`` namespace. Tags include speed, RPM, gear, tyre pressures, temperatures, trip counters and more. Units are encoded in the tag names (for example ``_kmh``, ``_deg``, ``_bar``).
+
+2. **Custom GPX namespace registration**
+
+   When exporting a GPX from a DataFrame (using ``dataframe_to_gpx``), the ``wlinq`` namespace is registered and all extension values are written under this namespace. This makes the output GPX self-describing and avoids collisions with existing GPX tags.
+
+3. **Generic extension support**
+
+   If you’re using a different device, you can emit your own ``<vendor:tag>`` elements in the CSV headers and extend the ``WLINQ_COLS`` mapping and ``_add_ext`` helper to write them into the GPX. Unknown namespaces are preserved in the extension dictionary, so adding support for new devices requires minimal code changes.
+
+4. **Part of the overlay workflow**
+
+   The primary motivation for these changes is to feed the generated GPX files into our fork of the `gopro-dashboard-overlay <https://github.com/zenonasz/gopro-dashboard-overlay>`_ project to render bike telemetry on top of GoPro videos.
+
+   The workflow is as follows:
+
+   1. Export your WunderLINQ TripLog as a CSV.
+   2. Run ``run/wlinq_csv_to_gpx.py`` to convert it to a GPX with custom ``<wlinq:*>`` extension tags.
+   3. Pass the resulting GPX file to ``gopro-dashboard.py`` (from the GoPro overlay project) as the ``--gpx`` argument.
+
+   See the gopro-dashboard-overlay README for more details on generating videos with custom layouts and how the GPX extension data is visualized.
+
+Local development with uv
+-------------------------
+
+To set up a local development environment:
+
+.. code-block:: bash
+
+   git clone git@github.com:zenonasz/gpx-converter.git
+   cd gpx-converter
+   uv venv --python 3.8
+   uv pip install -e .
+
+Example: Convert WunderLINQ CSV to GPX
+-------------------------------------
+
+Using uv (recommended):
+
+.. code-block:: bash
+
+   uv run python run/wlinq_csv_to_gpx.py \
+     <path_to_csv_file>/<wlinq_csv_file.csv> \
+     --output-gpx-path <output_gpx_path>/<output_gpx_file.gpx>
+
+Optional flags:
+
+.. code-block:: bash
+
+   --time-format "%Y%m%d-%H:%M:%S.%f"   # Custom timestamp format
+   --time-utc                           # Treat timestamps as UTC
+
+Example:
+
+.. code-block:: bash
+
+   uv run python csv_to_gpx_own2.py trip.csv \
+     --time-utc \
+     --output-gpx-path trip.gpx
+
+
 =============
 gpx-converter
 =============

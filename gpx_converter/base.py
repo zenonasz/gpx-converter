@@ -6,6 +6,22 @@ import numpy as np
 import glob
 import os
 
+from xml.etree import ElementTree
+
+try:
+    # Load LXML or fallback to cET or ET
+    import lxml.etree as mod_etree  # type: ignore
+except:
+    try:
+        import xml.etree.cElementTree as mod_etree # type: ignore
+    except:
+        import xml.etree.ElementTree as mod_etree # type: ignore
+
+GPXTPX_NS = "http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+# Custom namespace for WunderLINQ/bike fields.
+# Can be any stable URI-like string; keep it stable once you start generating files.
+WLINQ_NS = "https://wunderlinq.local/ns/1"
+
 
 class Converter(object):
     """main class converter that holds all conversion methods"""
@@ -24,7 +40,7 @@ class Converter(object):
             self.input_file = input_file_abs_path
             self.input_extension = os.path.splitext(input_file)[1].lower()
             # print(self.extension)
-    
+
 
     def _gpx_to_dict(self, lats_colname="latitude", longs_colname="longitude", times_colname="time", alts_colname="altitude", sats_colname="satellites", export_extensions=True):
         longs, lats, times, alts, sats, ext = [], [], [], [], [], []
@@ -40,9 +56,9 @@ class Converter(object):
             for item in items.copy():
                 if item in items_delete:
                     items.remove(item)
-            
+
             items = ['time','longitude','latitude','elevation']+items
-            
+
 
             for item in items:
                 print(type(getattr(gpx.tracks[0].segments[0].points[0],item)))
@@ -57,7 +73,7 @@ class Converter(object):
                             for extension in point.extensions:
                                 ext_tags+=[extension.tag]
 
-            
+
             #gpx_data = {times_colname: times, lats_colname: lats, longs_colname: longs, alts_colname: alts, sats_colname: sats}
             if export_extensions == True:
                 ext_tags=set(ext_tags)
@@ -70,14 +86,14 @@ class Converter(object):
                             for extension in point.extensions:
                                 extensions[extension.tag][-1]=extension.text
                 gpx_data = {**gpx_data, **extensions}
-                                
-                            
+
+
         gpx_data['altitude'] = gpx_data['elevation']
         del gpx_data['elevation']
         for column in gpx_data.copy().keys():
             if not any(gpx_data[column]):
                 del gpx_data[column]
-        
+
         return gpx_data
 
     def gpx_to_dictionary(self, latitude_key="latitude", longitude_key="longitude", time_key="time", altitude_key="altitude", satellites_key="satellites",export_extensions=True):
@@ -139,7 +155,7 @@ class Converter(object):
         df.to_csv(output_file, index=False)
         return True
 
-    def gpx_to_excel(self, lats_colname="latitude", longs_colname="longitude", times_colname="time", alts_colname="altitude", output_file=None, export_extensions=True):
+    def gpx_to_excel(self, lats_colname="latitude", longs_colname="longitude", times_colname="time", alts_colname="altitude", sats_colname="satellites", output_file=None, export_extensions=True):
         """
         convert a gpx file to a excel
         lats_colname: name of the latitudes column
@@ -203,8 +219,8 @@ class Converter(object):
         return True
 
     @staticmethod
-    def dataframe_to_gpx(input_df, lats_colname='latitude', longs_colname='longitude', 
-                                                            times_colname=None, 
+    def dataframe_to_gpx(input_df, lats_colname='latitude', longs_colname='longitude',
+                                                            times_colname=None,
                                                             alts_colname=None,
                                                             speed_colname=None,
                                                             symbol_colname=None,
@@ -212,7 +228,40 @@ class Converter(object):
                                                             name_colname=None,
                                                             horizontal_dilution_colname=None,
                                                             vertical_dilution_colname=None,
-                                                            position_dilution_colname=None, 
+                                                            position_dilution_colname=None,
+                                                            gps_speed_colname=None,
+                                                            gear_colname=None,
+                                                            engine_temp_colname=None,
+                                                            ambient_temp_colname=None,
+                                                            front_tire_pr_colname=None,
+                                                            rear_tire_pr_colname=None,
+                                                            odo_colname=None,
+                                                            bt_volt_colname=None,
+                                                            throttle_colname=None,
+                                                            front_brakes_colname=None,
+                                                            rear_brakes_colname=None,
+                                                            shifts_colname=None,
+                                                            vin_colname=None,
+                                                            ambient_light_colname=None,
+                                                            trip1_colname=None,
+                                                            trip2_colname=None,
+                                                            trip_auto_colname=None,
+                                                            avg_speed_colname=None,
+                                                            crnt_consumption_colname=None,
+                                                            fuel1_economy_colname=None,
+                                                            fuel2_economy_colname=None,
+                                                            fuel_range_colname=None,
+                                                            lean_angle_mobile_colname=None,
+                                                            g_force_colname=None,
+                                                            bearing_colname=None,
+                                                            barometer_kpa_colname=None,
+                                                            rpm_colname=None,
+                                                            lean_angle_colname=None,
+                                                            rear_wheel_speed_colname=None,
+                                                            device_batt_colname=None,
+                                                             # NEW: optional explicit time parsing
+                                                            time_format=None,
+                                                            time_utc=False,
                                                             output_file=None):
         """
         convert pandas dataframe to gpx
@@ -222,6 +271,35 @@ class Converter(object):
         times_colname: name of the time column
         alts_colname: name of the altitudes column
         sats_colname: name of the satellites column
+        gps_speed_colname=None,
+        gear_colname=None,
+        engine_temp_colname=None,
+        ambient_temp_colname=None,
+        front_tire_pr_colname=None,
+        rear_tire_pr_colname=None,
+        odo_colname=None,
+        bt_volt_colname=None,
+        throttle_colname=None,
+        front_brakes_colname=None,
+        rear_brakes_colname=None,
+        shifts_colname=None,
+        vin_colname=None,
+        ambient_light_colname=None,
+        trip1_colname=None,
+        trip2_colname=None,
+        trip_auto_colname=None,
+        avg_speed_colname=None,
+        crnt_consumption_colname=None,
+        fuel1_economy_colname=None,
+        fuel2_economy_colname=None,
+        fuel_range_colname=None,
+        lean_angle_mobile_colname=None,
+        g_force_colname=None,
+        barometer_kpa_colname=None,
+        rpm_colname=None,
+        lean_angle_colname=None,
+        rear_wheel_speed_colname=None,
+        device_batt_colname=None,
         output_file: path of the output file
         """
         if not output_file:
@@ -234,6 +312,10 @@ class Converter(object):
         import gpxpy.gpx
         gpx = gpxpy.gpx.GPX()
 
+        # Register custom namespace for our fields
+        # gpxpy will emit this in root element.
+        gpx.nsmap["wlinq"] = WLINQ_NS
+
         # Create first track in our GPX:(and half of export)
         gpx_track = gpxpy.gpx.GPXTrack()
         gpx.tracks.append(gpx_track)
@@ -242,26 +324,113 @@ class Converter(object):
         gpx_segment = gpxpy.gpx.GPXTrackSegment()
         gpx_track.segments.append(gpx_segment)
 
-        # Create points:
+
+
+        # Prepare time parsing once (vectorized)
+        if times_colname and times_colname in input_df.columns:
+            if time_format:
+                input_df[times_colname] = pd.to_datetime(
+                    input_df[times_colname], format=time_format, errors="coerce", utc=time_utc
+                )
+            else:
+                input_df[times_colname] = pd.to_datetime(
+                    input_df[times_colname], errors="coerce", utc=time_utc
+                )
+
+        def _get(df, idx, col):
+            if not col:
+                return None
+            if col not in df.columns:
+                return None
+            v = df.at[idx, col]
+            if v is None:
+                return None
+            if isinstance(v, float) and np.isnan(v):
+                return None
+            return v
+
+        def _add_ext(point, tag, value):
+            if value is None:
+                return
+            el = ElementTree.Element(f"{{{WLINQ_NS}}}{tag}")
+            el.text = str(value)
+            point.extensions.append(el)
+
+
+        # Create points
         for idx in input_df.index:
-            gpx_segment.points.append(gpxpy.gpx.GPXTrackPoint(input_df.loc[idx, lats_colname],
-                                                              input_df.loc[idx, longs_colname],
-                                                              time=pd.Timestamp(input_df.loc[idx, times_colname]) if times_colname else None,
-                                                              elevation=input_df.loc[idx, alts_colname] if alts_colname else None,
-                                                              speed=input_df.loc[idx, speed_colname] if speed_colname else None,
-                                                              symbol=input_df.loc[idx, symbol_colname] if symbol_colname else None,
-                                                              comment=input_df.loc[idx, comment_colname] if comment_colname else None,
-                                                              name=input_df.loc[idx, name_colname] if name_colname else None,
-                                                              horizontal_dilution=input_df.loc[idx, horizontal_dilution_colname] if horizontal_dilution_colname else None,
-                                                              vertical_dilution=input_df.loc[idx, vertical_dilution_colname] if vertical_dilution_colname else None,
-                                                              position_dilution=input_df.loc[idx, position_dilution_colname] if position_dilution_colname else None))
+            lat = _get(input_df, idx, lats_colname)
+            lon = _get(input_df, idx, longs_colname)
+            if lat is None or lon is None:
+                # Skip invalid points
+                continue
+
+            t = _get(input_df, idx, times_colname)
+            if isinstance(t, pd.Timestamp):
+                time_val = t.to_pydatetime()
+            else:
+                time_val = None
+
+            ele = _get(input_df, idx, alts_colname)
+
+            p = gpxpy.gpx.GPXTrackPoint(
+                lat,
+                lon,
+                time=time_val,
+                elevation=ele,
+                # Keep these as you had them (even if not all tools use them)
+                speed=_get(input_df, idx, speed_colname),
+                symbol=_get(input_df, idx, symbol_colname),
+                comment=_get(input_df, idx, comment_colname),
+                name=_get(input_df, idx, name_colname),
+                horizontal_dilution=_get(input_df, idx, horizontal_dilution_colname),
+                vertical_dilution=_get(input_df, idx, vertical_dilution_colname),
+                position_dilution=_get(input_df, idx, position_dilution_colname),
+            )
+
+            # Custom bike telemetry extensions (units encoded in tag names)
+            _add_ext(p, "speed_kmh", _get(input_df, idx, speed_colname))
+            _add_ext(p, "gps_speed_kmh", _get(input_df, idx, gps_speed_colname))
+            # same value as GPX <ele>, but also exported in wlinq namespace
+            _add_ext(p, "altitude_m", ele)
+            _add_ext(p, "gear", _get(input_df, idx, gear_colname))
+            _add_ext(p, "engine_temp_c", _get(input_df, idx, engine_temp_colname))
+            _add_ext(p, "ambient_temp_c", _get(input_df, idx, ambient_temp_colname))
+            _add_ext(p, "front_tire_pressure_bar", _get(input_df, idx, front_tire_pr_colname))
+            _add_ext(p, "rear_tire_pressure_bar", _get(input_df, idx, rear_tire_pr_colname))
+            _add_ext(p, "odometer_km", _get(input_df, idx, odo_colname))
+            _add_ext(p, "battery_voltage_v", _get(input_df, idx, bt_volt_colname))
+            _add_ext(p, "throttle_pct", _get(input_df, idx, throttle_colname))
+            _add_ext(p, "front_brakes", _get(input_df, idx, front_brakes_colname))
+            _add_ext(p, "rear_brakes", _get(input_df, idx, rear_brakes_colname))
+            _add_ext(p, "shifts", _get(input_df, idx, shifts_colname))
+            _add_ext(p, "vin", _get(input_df, idx, vin_colname))
+            _add_ext(p, "ambient_light", _get(input_df, idx, ambient_light_colname))
+            _add_ext(p, "trip1_km", _get(input_df, idx, trip1_colname))
+            _add_ext(p, "trip2_km", _get(input_df, idx, trip2_colname))
+            _add_ext(p, "trip_auto_km", _get(input_df, idx, trip_auto_colname))
+            _add_ext(p, "avg_speed_kmh", _get(input_df, idx, avg_speed_colname))
+            _add_ext(p, "current_consumption_l_per_100km", _get(input_df, idx, crnt_consumption_colname))
+            _add_ext(p, "fuel_economy_1_l_per_100km", _get(input_df, idx, fuel1_economy_colname))
+            _add_ext(p, "fuel_economy_2_l_per_100km", _get(input_df, idx, fuel2_economy_colname))
+            _add_ext(p, "fuel_range_km", _get(input_df, idx, fuel_range_colname))
+            _add_ext(p, "lean_angle_mobile_deg", _get(input_df, idx, lean_angle_mobile_colname))
+            _add_ext(p, "g_force", _get(input_df, idx, g_force_colname))
+            _add_ext(p, "bearing_deg", _get(input_df, idx, bearing_colname))
+            _add_ext(p, "barometer_kpa", _get(input_df, idx, barometer_kpa_colname))
+            _add_ext(p, "rpm", _get(input_df, idx, rpm_colname))
+            _add_ext(p, "lean_angle_deg", _get(input_df, idx, lean_angle_colname))
+            _add_ext(p, "rear_wheel_speed_kmh", _get(input_df, idx, rear_wheel_speed_colname))
+            _add_ext(p, "device_battery_pct", _get(input_df, idx, device_batt_colname))
+
+            gpx_segment.points.append(p)
 
         with open(output_file, 'w') as f:
             f.write(gpx.to_xml())
         return gpx.to_xml()
 
     def csv_to_gpx(self, lats_colname='latitude', longs_colname='longitude',
-                                                times_colname=None, 
+                                                times_colname=None,
                                                 alts_colname=None,
                                                 speed_colname=None,
                                                 symbol_colname=None,
@@ -269,7 +438,40 @@ class Converter(object):
                                                 name_colname=None,
                                                 horizontal_dilution_colname=None,
                                                 vertical_dilution_colname=None,
-                                                position_dilution_colname=None, 
+                                                position_dilution_colname=None,
+                                                gps_speed_colname=None,
+                                                gear_colname=None,
+                                                engine_temp_colname=None,
+                                                ambient_temp_colname=None,
+                                                front_tire_pr_colname=None,
+                                                rear_tire_pr_colname=None,
+                                                odo_colname=None,
+                                                bt_volt_colname=None,
+                                                throttle_colname=None,
+                                                front_brakes_colname=None,
+                                                rear_brakes_colname=None,
+                                                shifts_colname=None,
+                                                vin_colname=None,
+                                                ambient_light_colname=None,
+                                                trip1_colname=None,
+                                                trip2_colname=None,
+                                                trip_auto_colname=None,
+                                                avg_speed_colname=None,
+                                                crnt_consumption_colname=None,
+                                                fuel1_economy_colname=None,
+                                                fuel2_economy_colname=None,
+                                                fuel_range_colname=None,
+                                                lean_angle_mobile_colname=None,
+                                                g_force_colname=None,
+                                                bearing_colname=None,
+                                                barometer_kpa_colname=None,
+                                                rpm_colname=None,
+                                                lean_angle_colname=None,
+                                                rear_wheel_speed_colname=None,
+                                                device_batt_colname=None,
+                                                # NEW: optional explicit time parsing
+                                                time_format=None,
+                                                time_utc=False,
                                                 output_file=None):
         """
         convert csv file to gpx
@@ -279,6 +481,36 @@ class Converter(object):
         alts_colname: name of the altitudes column
         sats_colname: name of the satellites column
         output_file: path of the output file
+        gps_speed_colname=None,
+        gear_colname=None,
+        engine_temp_colname=None,
+        ambient_temp_colname=None,
+        front_tire_pr_colname=None,
+        rear_tire_pr_colname=None,
+        odo_colname=None,
+        bt_volt_colname=None,
+        throttle_colname=None,
+        front_brakes_colname=None,
+        rear_brakes_colname=None,
+        shifts_colname=None,
+        vin_colname=None,
+        ambient_light_colname=None,
+        trip1_colname=None,
+        trip2_colname=None,
+        trip_auto_colname=None,
+        avg_speed_colname=None,
+        crnt_consumption_colname=None,
+        fuel1_economy_colname=None,
+        fuel2_economy_colname=None,
+        fuel_range_colname=None,
+        lean_angle_mobile_colname=None,
+        g_force_colname=None,
+        bearing_colname=None,
+        barometer_kpa_colname=None,
+        rpm_colname=None,
+        lean_angle_colname=None,
+        rear_wheel_speed_colname=None,
+        device_batt_colname=None,
         """
         if not output_file:
             raise Exception("you need to provide an output file!")
@@ -298,20 +530,51 @@ class Converter(object):
                               name_colname=name_colname,
                               horizontal_dilution_colname=horizontal_dilution_colname,
                               vertical_dilution_colname=vertical_dilution_colname,
-                              position_dilution_colname=position_dilution_colname, 
+                              position_dilution_colname=position_dilution_colname,
+                              gps_speed_colname=gps_speed_colname,
+                              gear_colname=gear_colname,
+                              engine_temp_colname=engine_temp_colname,
+                              ambient_temp_colname=ambient_temp_colname,
+                              front_tire_pr_colname=front_tire_pr_colname,
+                              rear_tire_pr_colname=rear_tire_pr_colname,
+                              odo_colname=odo_colname,
+                              bt_volt_colname=bt_volt_colname,
+                              throttle_colname=throttle_colname,
+                              front_brakes_colname=front_brakes_colname,
+                              rear_brakes_colname=rear_brakes_colname,
+                              shifts_colname=shifts_colname,
+                              vin_colname=vin_colname,
+                              ambient_light_colname=ambient_light_colname,
+                              trip1_colname=trip1_colname,
+                              trip2_colname=trip2_colname,
+                              trip_auto_colname=trip_auto_colname,
+                              avg_speed_colname=avg_speed_colname,
+                              crnt_consumption_colname=crnt_consumption_colname,
+                              fuel1_economy_colname=fuel1_economy_colname,
+                              fuel2_economy_colname=fuel2_economy_colname,
+                              fuel_range_colname=fuel_range_colname,
+                              lean_angle_mobile_colname=lean_angle_mobile_colname,
+                              g_force_colname=g_force_colname,
+                              bearing_colname=bearing_colname,
+                              barometer_kpa_colname=barometer_kpa_colname,
+                              rpm_colname=rpm_colname,
+                              lean_angle_colname=lean_angle_colname,
+                              rear_wheel_speed_colname=rear_wheel_speed_colname,
+                              device_batt_colname=device_batt_colname,
                               output_file=output_file)
         return True
 
-    def excel_to_gpx(self, lats_colname='latitude', longs_colname='longitude', 
-                                                    times_colname=None, 
+    def excel_to_gpx(self, lats_colname='latitude', longs_colname='longitude',
+                                                    times_colname=None,
                                                     alts_colname=None,
+                                                    sats_colname=None,
                                                     speed_colname=None,
                                                     symbol_colname=None,
                                                     comment_colname=None,
                                                     name_colname=None,
                                                     horizontal_dilution_colname=None,
                                                     vertical_dilution_colname=None,
-                                                    position_dilution_colname=None, 
+                                                    position_dilution_colname=None,
                                                     output_file=None):
         """
         convert csv file to gpx
@@ -341,12 +604,12 @@ class Converter(object):
                               name_colname=name_colname,
                               horizontal_dilution_colname=horizontal_dilution_colname,
                               vertical_dilution_colname=vertical_dilution_colname,
-                              position_dilution_colname=position_dilution_colname, 
+                              position_dilution_colname=position_dilution_colname,
                               output_file=output_file)
         return True
 
     def json_to_gpx(self, lats_colname='latitude', longs_colname='longitude',
-                                                    times_colname=None, 
+                                                    times_colname=None,
                                                     alts_colname=None,
                                                     speed_colname=None,
                                                     symbol_colname=None,
@@ -354,7 +617,7 @@ class Converter(object):
                                                     name_colname=None,
                                                     horizontal_dilution_colname=None,
                                                     vertical_dilution_colname=None,
-                                                    position_dilution_colname=None, 
+                                                    position_dilution_colname=None,
                                                     output_file=None):
         """
         convert csv file to gpx
@@ -381,13 +644,13 @@ class Converter(object):
                               name_colname=name_colname,
                               horizontal_dilution_colname=horizontal_dilution_colname,
                               vertical_dilution_colname=vertical_dilution_colname,
-                              position_dilution_colname=position_dilution_colname, 
+                              position_dilution_colname=position_dilution_colname,
                               output_file=output_file)
         return True
 
     @staticmethod
-    def convert_multi_csv_to_gpx(dirpath, lats_colname='latitude', longs_colname='longitude', 
-                                                                    times_colname=None, 
+    def convert_multi_csv_to_gpx(dirpath, lats_colname='latitude', longs_colname='longitude',
+                                                                    times_colname=None,
                                                                     alts_colname=None,
                                                                     speed_colname=None,
                                                                     symbol_colname=None,
@@ -395,7 +658,7 @@ class Converter(object):
                                                                     name_colname=None,
                                                                     horizontal_dilution_colname=None,
                                                                     vertical_dilution_colname=None,
-                                                                    position_dilution_colname=None, 
+                                                                    position_dilution_colname=None,
                                                                     output_file=None):
         """
         convert multiple csv file from directory to gpx
@@ -420,7 +683,7 @@ class Converter(object):
                                        name_colname=name_colname,
                                        horizontal_dilution_colname=horizontal_dilution_colname,
                                        vertical_dilution_colname=vertical_dilution_colname,
-                                       position_dilution_colname=position_dilution_colname, 
+                                       position_dilution_colname=position_dilution_colname,
                                        output_file=gpx_path)
 
     @staticmethod
