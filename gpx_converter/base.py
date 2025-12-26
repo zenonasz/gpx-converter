@@ -13,9 +13,9 @@ try:
     import lxml.etree as mod_etree  # type: ignore
 except:
     try:
-        import xml.etree.cElementTree as mod_etree # type: ignore
+        import xml.etree.cElementTree as mod_etree  # type: ignore
     except:
-        import xml.etree.ElementTree as mod_etree # type: ignore
+        import xml.etree.ElementTree as mod_etree  # type: ignore
 
 GPXTPX_NS = "http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
 # Custom namespace for WunderLINQ/bike fields.

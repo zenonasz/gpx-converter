@@ -1,3 +1,13 @@
+============
+Contributing uv instructions
+============
+
+(Optional) Run the test suite or lint checks if you want to mirror the upstream quality gates:
+
+$uv pip install flake8 tox pytest
+$uv run flake8 gpx_converter
+$uv run pytest
+$uv run tox
 
 
 ============
