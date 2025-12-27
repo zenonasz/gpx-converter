@@ -142,6 +142,46 @@ def _rewrite_csv_time_to_utc_temp_csv(
     df.to_csv(tmp_path, index=False)
     return tmp_path
 
+def _sanitize_wlinq_csv_temp_csv(src_csv: Path) -> Path:
+    """
+    - Drop rows where lat/lon are not numeric (e.g. 'No Fix')
+    - Coerce numeric telemetry columns (e.g. GPS Speed) to numeric; invalid -> blank
+    Returns a temp CSV path.
+    """
+    df = pd.read_csv(src_csv)
+
+    lat_col = WLINQ_COLS["lat"]
+    lon_col = WLINQ_COLS["lon"]
+
+    # 1) lat/lon must be numeric for GPX
+    df[lat_col] = pd.to_numeric(df[lat_col], errors="coerce")
+    df[lon_col] = pd.to_numeric(df[lon_col], errors="coerce")
+
+    before = len(df)
+    df = df.dropna(subset=[lat_col, lon_col])
+    removed = before - len(df)
+    if removed:
+        print(f"[wlinq] Removed {removed} row(s) with invalid lat/lon")
+
+    # 2) Coerce GPS Speed (and optionally other numeric columns) so 'No Fix' won't crash
+    maybe_numeric = [
+        WLINQ_COLS.get("gps_speed")
+    ]
+    maybe_numeric = [c for c in maybe_numeric if c and c in df.columns]
+
+    for c in maybe_numeric:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # Write blanks instead of NaN (safe for CSV -> converter)
+    for c in maybe_numeric:
+        df[c] = df[c].where(df[c].notna(), "")
+
+    tmp = tempfile.NamedTemporaryFile(prefix="wlinq_clean_", suffix=".csv", delete=False)
+    tmp_path = Path(tmp.name)
+    tmp.close()
+    df.to_csv(tmp_path, index=False)
+    return tmp_path
+
 
 def _force_gpx_times_to_have_z(gpx_path: Path) -> None:
     """
@@ -175,6 +215,7 @@ def convert_wunderlinq_csv_to_gpx(cfg: WunderlinqToGpxConfig) -> None:
     converter_time_utc = False  # we will set True only if we rewrote times to UTC
 
     temp_csv = None
+    clean_csv = None
     try:
         if cfg.time_utc:
             temp_csv = _rewrite_csv_time_to_utc_temp_csv(
@@ -186,6 +227,10 @@ def convert_wunderlinq_csv_to_gpx(cfg: WunderlinqToGpxConfig) -> None:
             input_csv_for_converter = temp_csv
             converter_time_format = "%Y%m%d-%H:%M:%S.%f"
             converter_time_utc = True
+
+        # NEW: sanitize after (optional) time rewrite
+        clean_csv = _sanitize_wlinq_csv_temp_csv(input_csv_for_converter)
+        input_csv_for_converter = clean_csv
 
         Converter(input_file=str(input_csv_for_converter)).csv_to_gpx(
             lats_colname=WLINQ_COLS["lat"],
@@ -244,11 +289,18 @@ def convert_wunderlinq_csv_to_gpx(cfg: WunderlinqToGpxConfig) -> None:
 
     finally:
         # Best-effort cleanup of temp CSV
-        if temp_csv is not None:
-            try:
-                temp_csv.unlink()
-            except Exception:
-                pass
+         # cleanup temp files
+        for p in (clean_csv, temp_csv):
+            if p is not None:
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+        # if temp_csv is not None:
+        #     try:
+        #         temp_csv.unlink()
+        #     except Exception:
+        #         pass
 
 
 def default_output_path_for(csv_path: Path) -> Path:
