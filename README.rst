@@ -56,15 +56,42 @@ Optional flags:
 
    --time-format "%Y%m%d-%H:%M:%S.%f"   # Custom timestamp format
    --time-utc                           # Treat timestamps as UTC
+   --local-tz Asia/Nicosia              # Timezone of CSV timestamps
+
+Timestamp and timezone handling
+-------------------------------
+
+WunderLINQ CSV timestamps are recorded in local device time without timezone
+metadata (for example: ``20250615-18:24:20.306``).
+
+To correctly align WunderLINQ telemetry with GoPro GPS data, timestamps should
+be converted to UTC before generating the GPX file.
+
+The conversion script supports this via the following options:
+
+- ``--time-format``
+  Specifies the input timestamp format used in the CSV.
+
+- ``--local-tz``
+  Specifies the IANA timezone in which the CSV timestamps should be interpreted
+  (for example ``Asia/Nicosia``).
+
+- ``--time-utc``
+  Converts timestamps from the specified local timezone to UTC and writes
+  UTC-normalised timestamps into the GPX file.
 
 Example:
 
 .. code-block:: bash
 
-   uv run python csv_to_gpx_own2.py trip.csv \
+   uv run python run/wlinq_csv_to_gpx.py trip.csv \
+     --time-format "%Y%m%d-%H:%M:%S.%f" \
+     --local-tz Asia/Nicosia \
      --time-utc \
      --output-gpx-path trip.gpx
 
+When ``--time-utc`` is enabled, all timestamps written to the GPX are UTC and
+safe to merge with GoPro GPS tracks or other time-aware data sources.
 
 =============
 gpx-converter
